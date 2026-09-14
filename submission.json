@@ -3,8 +3,8 @@
   "candidate": {
     "name": "Harsh Prakash",
     "email": "harsh.20237020@mnnit.ac.in",
-    "repo_url": "REPLACE_WITH_YOUR_GITHUB_REPO_URL",
-    "demo_url": "REPLACE_WITH_YOUR_GITHUB_PAGES_URL"
+    "repo_url": "https://github.com/hp101-pu/ivy-assignment",
+    "demo_url": "https://hp101-pu.github.io/ivy-assignment/"
   },
   "answers": {
     "total_listing_records": 4700,
