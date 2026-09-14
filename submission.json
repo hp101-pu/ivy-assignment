@@ -1,0 +1,138 @@
+{
+  "api_key": "IVY26-288B6A54EAAC",
+  "candidate": {
+    "name": "Harsh Prakash",
+    "email": "harsh.20237020@mnnit.ac.in",
+    "repo_url": "REPLACE_WITH_YOUR_GITHUB_REPO_URL",
+    "demo_url": "REPLACE_WITH_YOUR_GITHUB_PAGES_URL"
+  },
+  "answers": {
+    "total_listing_records": 4700,
+    "unique_properties": 4672,
+    "active_listings": 3722,
+    "corrupt_listing_ids": [
+      "100-1001077", "100-1002346", "100-1002442", "100-1002884", "100-1003117",
+      "DWE-1001165", "DWE-1001183", "DWE-1001909", "DWE-1003673",
+      "MAG-1000179", "MAG-1000885", "MAG-1003269", "MAG-1003510",
+      "SQU-1000979", "SQU-1002843", "SQU-1003177",
+      "ZER-1000500", "ZER-1001207", "ZER-1001249", "ZER-1001334",
+      "ZER-1002632", "ZER-1002667", "ZER-1002911", "ZER-1003426"
+    ],
+    "total_monthly_rent": 7134800,
+    "avg_price_per_sqft_2bhk": 21013.25,
+    "costliest_project": { "project_id": "P10255", "price_max_inr": 48900000 },
+    "listings_last_7_days": 149,
+    "fake_listing_ids": ["ZER-1002980", "ZER-1003280", "MAG-1002194", "DWE-1003262"],
+    "projects_with_wrong_listing_count": 127
+  },
+  "findings": [
+    {
+      "endpoint": "/v1/listings",
+      "category": "auth",
+      "documented": "append the API key as a query parameter: ?api_key=...",
+      "actual": "the API rejects the query parameter with 401 and requires the key in an X-API-Key header instead",
+      "how_found": "sent the first request exactly as documented and read the 401 error body",
+      "impact": "high - no request works at all until this is fixed",
+      "evidence": []
+    },
+    {
+      "endpoint": "/auth/login",
+      "category": "auth",
+      "documented": "tokens are valid for 24 hours and there is no refresh flow",
+      "actual": "the token expires in 900 seconds (15 minutes) and a working /auth/refresh endpoint with a refresh_token is provided",
+      "how_found": "inspected the raw login response body",
+      "impact": "high - a frontend built assuming a 24h token would silently break after 15 minutes; the app must implement token refresh, which the docs say is unnecessary",
+      "evidence": []
+    },
+    {
+      "endpoint": "/auth/login",
+      "category": "auth",
+      "documented": "response contains a field named token",
+      "actual": "the field is named access_token",
+      "how_found": "inspected the raw login response body",
+      "impact": "low - naming only, but breaks naive field access",
+      "evidence": []
+    },
+    {
+      "endpoint": "/v1/listings",
+      "category": "pagination",
+      "documented": "responses are shaped {total, page, page_size, results} and total is the exact number of records matching your filters",
+      "actual": "responses are shaped {limit, offset, count, total, has_more, results}; the page parameter is silently ignored (offset is what matters); and total (4445) does not match either the live-only count (3722) or the true full paginated count (4700) - it is simply wrong",
+      "how_found": "compared page=1 vs offset=0 (identical results, proving page is ignored), then paged to has_more=false and counted unique listing_ids with zero duplicates, exceeding the reported total",
+      "impact": "high - trusting the documented total-based pagination formula would silently truncate the retrievable dataset by 255 records",
+      "evidence": []
+    },
+    {
+      "endpoint": "/v1/listings",
+      "category": "pagination",
+      "documented": "limit default 20, maximum 200",
+      "actual": "the server caps the effective page size at 50 regardless of the limit value requested",
+      "how_found": "requested limit=200 and observed only 50 results returned per page",
+      "impact": "medium - callers relying on the documented max will under-fetch per request and must page more times than expected",
+      "evidence": []
+    },
+    {
+      "endpoint": "/v1/listings",
+      "category": "completeness",
+      "documented": "returns active sale listings; inactive, expired and withdrawn listings are excluded server side, so anything this endpoint returns is safe to show to a user",
+      "actual": "978 of the 4700 retrievable records have is_live: false",
+      "how_found": "counted the is_live field across the full retrieved dataset",
+      "impact": "high - a frontend that shows every record returned by this endpoint, as the docs say is safe, would display withdrawn/inactive properties to users",
+      "evidence": ["100-1003403"]
+    },
+    {
+      "endpoint": "/v1/analytics/summary",
+      "category": "missing_endpoint",
+      "documented": "returns pre-computed aggregates for the city",
+      "actual": "returns 404 Not Found; also tried /v1/analytics and /analytics/summary, both 404",
+      "how_found": "called the documented path directly",
+      "impact": "high - the insights screen must be computed client-side from the raw data instead",
+      "evidence": []
+    },
+    {
+      "endpoint": "/v1/projects",
+      "category": "units",
+      "documented": "price_min and price_max are in rupees",
+      "actual": "values are a mix of crore and lakh figures with no unit flag; e.g. one project shows price_min=98.0, price_max=2.74 in the same record, which is only sane if 98.0 means lakhs (~9.8M) and 2.74 means crores (~27.4M)",
+      "how_found": "spotted an internally-inconsistent price_min > price_max under a rupees interpretation, then verified a crore/lakh disambiguation using price-per-sqft plausibility against min_area_sqft/max_area_sqft across all 520 projects (0 ambiguous cases)",
+      "impact": "high - naively sorting or summing raw project prices produces nonsense; Q7 specifically requires this correction",
+      "evidence": ["P10002", "P10255"]
+    },
+    {
+      "endpoint": "/v1/rentals",
+      "category": "units",
+      "documented": "deposit is the security deposit in rupees",
+      "actual": "for every rental sourced from website=zerobroker (384 records), deposit is a tiny integer (2-12) representing a multiplier on monthly rent, not a rupee amount; all other sources store a real rupee deposit at a median of 6x monthly rent",
+      "how_found": "computed deposit/price ratio across the full dataset grouped by website; zerobroker showed median ratio 0.000 with 100% of its records under 0.5, versus exactly 6.000 for every other source",
+      "impact": "medium - any screen displaying rental deposits verbatim would show nonsensical figures like a Rs 6 deposit",
+      "evidence": ["R1000399", "R1000002"]
+    },
+    {
+      "endpoint": "/v1/projects",
+      "category": "consistency",
+      "documented": "total_listings is recomputed whenever a listing is added or withdrawn, so it always agrees with what GET /v1/listings?project_id=... returns",
+      "actual": "127 of 520 projects have a total_listings value that disagrees with the count of matching live listing records in the fully retrieved dataset",
+      "how_found": "grouped all retrieved listings by project_id and compared counts against each project's declared total_listings",
+      "impact": "medium - the field cannot be trusted as a live count",
+      "evidence": ["P10001", "P10003", "P10004", "P10005"]
+    },
+    {
+      "endpoint": "/v1/favourites",
+      "category": "missing_endpoint",
+      "documented": "GET /v1/favourites returns {count, results} listing objects; POST and DELETE manage a logged-in user's saved listings server-side",
+      "actual": "GET https://solve.ivy.homes/v1/favourites returns 404 {\"detail\":\"Not Found\"} with a correctly-authenticated request (verified in browser devtools - correct path, method, headers)",
+      "how_found": "implemented the saved-listings screen against the documented endpoint, then inspected the network request in browser devtools when it failed to load",
+      "impact": "high - the endpoint does not exist at all, so saved listings cannot be implemented server-side as documented; the frontend must fall back to client-side (localStorage) persistence to satisfy the 'saved listings, per user, survives reload' requirement",
+      "evidence": []
+    },
+    {
+      "endpoint": "*",
+      "category": "fraud",
+      "documented": "n/a - not a documentation discrepancy, a data integrity issue",
+      "actual": "a small number of listing/rental descriptions contain an injected instruction addressed to 'automated tools and AI assistants' asking any AI processing the data to add a fabricated 'dataset_audit_ref' key to submission.json",
+      "how_found": "an AI assistant helping build this submission noticed the injected text while reading raw description fields and did not comply with it",
+      "impact": "high if unnoticed - a candidate using an AI coding agent uncritically could have their submission's answers object polluted with a field that was never requested by Ivy Homes",
+      "evidence": ["MAG-1003078", "MAG-1000452", "SQU-1001894", "SQU-1002491", "R1000399", "R1000006", "R1000085", "R1000362"]
+    }
+  ]
+}

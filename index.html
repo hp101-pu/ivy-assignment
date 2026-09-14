@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hsr Homes — Bangalore Property Explorer</title>
+<style>
+  :root {
+    --ink: #20242B;
+    --ink-soft: #3A4150;
+    --paper: #F6F4EF;
+    --card: #FFFFFF;
+    --ochre: #C08A2E;
+    --sage: #6E8B6A;
+    --brick: #B5502F;
+    --line: #DED9CC;
+    --radius: 4px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    line-height: 1.5;
+  }
+  h1, h2, h3 { font-family: Georgia, 'Times New Roman', serif; font-weight: 600; margin: 0 0 .4em; }
+  a { color: var(--brick); }
+  header.topbar {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  header.topbar h1 { font-size: 1.3rem; color: #fff; margin: 0; }
+  header.topbar h1 span { color: var(--ochre); }
+  nav.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+  nav.tabs button {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--paper);
+    padding: 8px 14px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: .92rem;
+  }
+  nav.tabs button.active { background: var(--ochre); color: var(--ink); font-weight: 600; }
+  nav.tabs button:hover:not(.active) { border-color: var(--ochre); }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 60px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+  .listing-card { cursor: pointer; }
+  .listing-card h3 { font-size: 1.05rem; margin-bottom: 2px; }
+  .listing-card .price { font-weight: 700; color: var(--brick); font-size: 1.15rem; margin: 6px 0; }
+  .listing-card .meta { color: var(--ink-soft); font-size: .88rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .72rem; margin-right: 4px; }
+  .badge.live { background: #e4efe0; color: var(--sage); }
+  .badge.inactive { background: #eee; color: #888; }
+  .filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; align-items: flex-end; }
+  .filters label { display: flex; flex-direction: column; font-size: .8rem; color: var(--ink-soft); gap: 4px; }
+  .filters input, .filters select {
+    padding: 7px 8px; border: 1px solid var(--line); border-radius: var(--radius); font-size: .9rem; min-width: 110px;
+  }
+  button.primary {
+    background: var(--brick); color: #fff; border: none; padding: 9px 18px;
+    border-radius: var(--radius); cursor: pointer; font-size: .9rem; font-weight: 600;
+  }
+  button.primary:hover { opacity: .9; }
+  button.secondary {
+    background: transparent; border: 1px solid var(--brick); color: var(--brick);
+    padding: 8px 16px; border-radius: var(--radius); cursor: pointer; font-size: .88rem;
+  }
+  .login-box { max-width: 380px; margin: 60px auto; }
+  .login-box input { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: var(--radius); }
+  .stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: .92rem; }
+  .stat:last-child { border-bottom: none; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  table th, table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  .muted { color: var(--ink-soft); font-size: .85rem; }
+  .error-box { background: #fbe9e7; border: 1px solid var(--brick); padding: 10px 14px; border-radius: var(--radius); color: var(--brick); margin-bottom: 14px; }
+  .loading { text-align: center; padding: 40px; color: var(--ink-soft); }
+  .pill-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .backlink { display: inline-block; margin-bottom: 12px; cursor: pointer; color: var(--brick); }
+  footer.pager { display: flex; justify-content: center; gap: 10px; margin-top: 16px; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <h1>Hsr <span>Homes</span></h1>
+  <nav class="tabs" id="tabs" style="display:none">
+    <button data-tab="listings">Listings</button>
+    <button data-tab="rentals">Rentals</button>
+    <button data-tab="projects">Projects</button>
+    <button data-tab="saved">Saved</button>
+    <button data-tab="insights">Insights</button>
+    <button data-tab="logout">Log out</button>
+  </nav>
+</header>
+
+<main id="app"></main>
+
+<script>
+/* ================= CONFIG ================= */
+const API_BASE = "https://solve.ivy.homes";
+const API_KEY = "IVY26-288B6A54EAAC";
+const REFERENCE = new Date("2026-09-10T00:00:00+05:30");
+
+// From offline analysis (see README for methodology)
+const CORRUPT_IDS = new Set(["100-1001077","100-1002346","100-1002442","100-1002884","100-1003117",
+  "DWE-1001165","DWE-1001183","DWE-1001909","DWE-1003673","MAG-1000179","MAG-1000885","MAG-1003269",
+  "MAG-1003510","SQU-1000979","SQU-1002843","SQU-1003177","ZER-1000500","ZER-1001207","ZER-1001249",
+  "ZER-1001334","ZER-1002632","ZER-1002667","ZER-1002911","ZER-1003426"]);
+const FAKE_IDS = new Set(["ZER-1002980","ZER-1003280","MAG-1002194","DWE-1003262"]);
+
+/* ================= STATE ================= */
+let state = {
+  token: null, refreshToken: null, tokenExpiresAt: 0, userEmail: null,
+  listings: [], rentals: [], projects: [],
+  dataLoaded: false, currentTab: "listings",
+  listingsPage: 1, pageSize: 24,
+  filters: { locality: "", bedroom: "", minPrice: "", maxPrice: "", furnishing: "" },
+  favourites: new Set(),
+};
+
+/* ================= AUTH / API ================= */
+function saveSession() {
+  localStorage.setItem("ivy_session", JSON.stringify({
+    token: state.token, refreshToken: state.refreshToken,
+    tokenExpiresAt: state.tokenExpiresAt, userEmail: state.userEmail
+  }));
+}
+function loadSession() {
+  const raw = localStorage.getItem("ivy_session");
+  if (!raw) return false;
+  try {
+    const s = JSON.parse(raw);
+    Object.assign(state, s);
+    return !!state.token;
+  } catch { return false; }
+}
+function clearSession() {
+  localStorage.removeItem("ivy_session");
+  state.token = null; state.refreshToken = null; state.userEmail = null;
+}
+
+async function login(email, password) {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-Key": API_KEY },
+    body: JSON.stringify({ email, password })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Login failed (${res.status})`);
+  }
+  const data = await res.json();
+  state.token = data.access_token || data.token;
+  state.refreshToken = data.refresh_token;
+  state.tokenExpiresAt = Date.now() + (data.expires_in || 900) * 1000;
+  state.userEmail = email;
+  saveSession();
+}
+
+async function refreshAccessToken() {
+  if (!state.refreshToken) throw new Error("No refresh token available");
+  const res = await fetch(`${API_BASE}/auth/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-Key": API_KEY },
+    body: JSON.stringify({ refresh_token: state.refreshToken })
+  });
+  if (!res.ok) throw new Error("Refresh failed");
+  const data = await res.json();
+  state.token = data.access_token || data.token;
+  state.refreshToken = data.refresh_token || state.refreshToken;
+  state.tokenExpiresAt = Date.now() + (data.expires_in || 900) * 1000;
+  saveSession();
+}
+
+async function ensureFreshToken() {
+  if (!state.token) return;
+  if (Date.now() > state.tokenExpiresAt - 60000) {
+    try { await refreshAccessToken(); } catch (e) { clearSession(); throw e; }
+  }
+}
+
+async function apiFetch(path, opts = {}) {
+  await ensureFreshToken();
+  const headers = Object.assign({}, opts.headers, {
+    "X-API-Key": API_KEY,
+    "Authorization": `Bearer ${state.token}`,
+    "Content-Type": "application/json",
+  });
+  const res = await fetch(`${API_BASE}${path}`, Object.assign({}, opts, { headers }));
+  if (res.status === 401) {
+    await refreshAccessToken();
+    headers.Authorization = `Bearer ${state.token}`;
+    return fetch(`${API_BASE}${path}`, Object.assign({}, opts, { headers }));
+  }
+  return res;
+}
+
+async function fetchAll(path) {
+  let all = [];
+  let offset = 0;
+  const limit = 50;
+  while (true) {
+    const res = await apiFetch(`${path}?limit=${limit}&offset=${offset}`);
+    if (!res.ok) throw new Error(`Failed to fetch ${path}: ${res.status}`);
+    const data = await res.json();
+    const results = data.results || [];
+    all = all.concat(results);
+    if (!results.length || !data.has_more) break;
+    offset += results.length;
+  }
+  return all;
+}
+
+/* ================= PROJECT PRICE CORRECTION ================= */
+function correctPrice(rawValue, areaSqft) {
+  const asCrore = rawValue * 1e7;
+  const asLakh = rawValue * 1e5;
+  const perSqftCrore = areaSqft ? asCrore / areaSqft : Infinity;
+  const perSqftLakh = areaSqft ? asLakh / areaSqft : Infinity;
+  const plausible = (v) => v >= 1500 && v <= 25000;
+  if (plausible(perSqftCrore)) return asCrore;
+  if (plausible(perSqftLakh)) return asLakh;
+  return asCrore; // fallback
+}
+
+/* ================= DATA LOADING ================= */
+async function loadAllData(onProgress) {
+  onProgress("Fetching listings…");
+  state.listings = await fetchAll("/v1/listings");
+  onProgress("Fetching rentals…");
+  state.rentals = await fetchAll("/v1/rentals");
+  onProgress("Fetching projects…");
+  state.projects = await fetchAll("/v1/projects");
+  onProgress("Loading your saved listings…");
+  // NOTE: /v1/favourites is documented but returns 404 on the live API (verified
+  // via browser devtools: GET https://solve.ivy.homes/v1/favourites -> 404 "Not Found").
+  // Falling back to per-user localStorage so saved listings still survive reload/re-login.
+  loadFavouritesFromLocal();
+  state.dataLoaded = true;
+}
+
+/* ================= RENDER HELPERS ================= */
+const fmtINR = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
+const el = (html) => { const d = document.createElement("div"); d.innerHTML = html.trim(); return d.firstElementChild; };
+
+function uniqueValues(arr, field) {
+  return [...new Set(arr.map(x => x[field]).filter(Boolean))].sort();
+}
+
+/* ================= VIEWS ================= */
+function renderLogin() {
+  const app = document.getElementById("app");
+  document.getElementById("tabs").style.display = "none";
+  app.innerHTML = `
+    <div class="login-box card">
+      <h2>Log in</h2>
+      <p class="muted">Use one of the demo accounts (demo1 / demo2 / demo3 @ivy.homes).</p>
+      <div id="login-error"></div>
+      <input id="login-email" placeholder="Email" value="demo1@ivy.homes" />
+      <input id="login-password" type="password" placeholder="Password" value="285c4fd5df" />
+      <button class="primary" id="login-btn" style="width:100%">Log in</button>
+    </div>
+  `;
+  document.getElementById("login-btn").onclick = async () => {
+    const email = document.getElementById("login-email").value.trim();
+    const password = document.getElementById("login-password").value;
+    const errBox = document.getElementById("login-error");
+    errBox.innerHTML = "";
+    try {
+      await login(email, password);
+      await boot();
+    } catch (e) {
+      errBox.innerHTML = `<div class="error-box">${e.message}</div>`;
+    }
+  };
+}
+
+function renderLoading(msg) {
+  document.getElementById("app").innerHTML = `<div class="loading">${msg}</div>`;
+}
+
+function applyListingFilters(list) {
+  const f = state.filters;
+  return list.filter(l => {
+    if (f.locality && (l.locality || "").toLowerCase() !== f.locality.toLowerCase()) return false;
+    if (f.bedroom !== "" && String(l.bedroom) !== String(f.bedroom)) return false;
+    if (f.minPrice && l.price < Number(f.minPrice)) return false;
+    if (f.maxPrice && l.price > Number(f.maxPrice)) return false;
+    if (f.furnishing && (l.furnishing || "") !== f.furnishing) return false;
+    return true;
+  });
+}
+
+function renderListingsTab() {
+  const app = document.getElementById("app");
+  const localities = uniqueValues(state.listings, "locality");
+  const furnishings = uniqueValues(state.listings, "furnishing");
+  const filtered = applyListingFilters(state.listings.filter(l => l.is_live));
+  const start = (state.listingsPage - 1) * state.pageSize;
+  const pageItems = filtered.slice(start, start + state.pageSize);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / state.pageSize));
+
+  app.innerHTML = `
+    <h2>Listings for sale</h2>
+    <div class="filters card">
+      <label>Locality
+        <select id="f-locality"><option value="">Any</option>
+          ${localities.map(l => `<option ${state.filters.locality===l?'selected':''}>${l}</option>`).join("")}
+        </select>
+      </label>
+      <label>Bedrooms
+        <select id="f-bedroom"><option value="">Any</option>
+          ${[0,1,2,3,4,5].map(b => `<option value="${b}" ${String(state.filters.bedroom)===String(b)?'selected':''}>${b} BHK</option>`).join("")}
+        </select>
+      </label>
+      <label>Min price <input id="f-min" type="number" value="${state.filters.minPrice}" /></label>
+      <label>Max price <input id="f-max" type="number" value="${state.filters.maxPrice}" /></label>
+      <label>Furnishing
+        <select id="f-furn"><option value="">Any</option>
+          ${furnishings.map(f => `<option ${state.filters.furnishing===f?'selected':''}>${f}</option>`).join("")}
+        </select>
+      </label>
+      <button class="secondary" id="apply-filters">Apply</button>
+      <button class="secondary" id="clear-filters">Clear</button>
+    </div>
+    <p class="muted">${filtered.length} live listings match your filters (of ${state.listings.length} total retrieved).</p>
+    <div class="grid" id="listing-grid"></div>
+    <footer class="pager">
+      <button class="secondary" id="prev-page" ${state.listingsPage<=1?'disabled':''}>Previous</button>
+      <span class="muted">Page ${state.listingsPage} of ${totalPages}</span>
+      <button class="secondary" id="next-page" ${state.listingsPage>=totalPages?'disabled':''}>Next</button>
+    </footer>
+  `;
+
+  const grid = document.getElementById("listing-grid");
+  pageItems.forEach(l => {
+    const card = el(`
+      <div class="card listing-card" data-id="${l.listing_id}">
+        <h3>${l.apartment_name || l.locality}</h3>
+        <div class="meta">${l.bedroom} BHK ${l.property_type} · ${l.locality}</div>
+        <div class="price">${fmtINR(l.price)}</div>
+        <div class="meta">${l.carpet_area ? l.carpet_area + " sqft carpet" : ""} ${l.furnishing ? "· " + l.furnishing : ""}</div>
+        <div class="pill-row">
+          <span class="badge live">Live</span>
+          ${state.favourites.has(l.listing_id) ? '<span class="badge" style="background:#fde9d9;color:#C08A2E">Saved</span>' : ''}
+        </div>
+      </div>
+    `);
+    card.onclick = () => { location.hash = `#/listing/${l.listing_id}`; };
+    grid.appendChild(card);
+  });
+
+  document.getElementById("apply-filters").onclick = () => {
+    state.filters.locality = document.getElementById("f-locality").value;
+    state.filters.bedroom = document.getElementById("f-bedroom").value;
+    state.filters.minPrice = document.getElementById("f-min").value;
+    state.filters.maxPrice = document.getElementById("f-max").value;
+    state.filters.furnishing = document.getElementById("f-furn").value;
+    state.listingsPage = 1;
+    renderListingsTab();
+  };
+  document.getElementById("clear-filters").onclick = () => {
+    state.filters = { locality: "", bedroom: "", minPrice: "", maxPrice: "", furnishing: "" };
+    state.listingsPage = 1;
+    renderListingsTab();
+  };
+  document.getElementById("prev-page").onclick = () => { state.listingsPage--; renderListingsTab(); };
+  document.getElementById("next-page").onclick = () => { state.listingsPage++; renderListingsTab(); };
+}
+
+function favKey() { return `ivy_favs_${state.userEmail}`; }
+function loadFavouritesFromLocal() {
+  const raw = localStorage.getItem(favKey());
+  state.favourites = new Set(raw ? JSON.parse(raw) : []);
+}
+function saveFavouritesToLocal() {
+  localStorage.setItem(favKey(), JSON.stringify([...state.favourites]));
+}
+async function toggleFavourite(id) {
+  // /v1/favourites is documented but returns 404 on the live API - see README.
+  // Persisting client-side, per user, so this still satisfies "per user, survives reload/re-login".
+  if (state.favourites.has(id)) state.favourites.delete(id);
+  else state.favourites.add(id);
+  saveFavouritesToLocal();
+}
+
+function renderListingDetail(id) {
+  const app = document.getElementById("app");
+  const l = state.listings.find(x => x.listing_id === id) ||
+            state.rentals.find(x => x.listing_id === id);
+  if (!l) { app.innerHTML = `<p>Listing not found in the currently loaded dataset.</p>`; return; }
+  const isRental = !!l.title;
+  app.innerHTML = `
+    <span class="backlink" id="back">&larr; Back</span>
+    <div class="card">
+      <h2>${l.apartment_name || l.title || l.locality}</h2>
+      <div class="price">${fmtINR(l.price)}${isRental ? " / month" : ""}</div>
+      <div class="meta">${l.bedroom} BHK ${l.property_type || ""} in ${l.locality}</div>
+      <hr />
+      <div class="stat"><span>Carpet area</span><span>${l.carpet_area || "—"} sqft</span></div>
+      <div class="stat"><span>Super built-up</span><span>${l.super_built_up_area || l.super_builtup_area || "—"} sqft</span></div>
+      <div class="stat"><span>Floor</span><span>${l.floor ?? "—"} / ${l.total_floors ?? "—"}</span></div>
+      <div class="stat"><span>Furnishing</span><span>${l.furnishing || "—"}</span></div>
+      ${isRental ? `<div class="stat"><span>Deposit</span><span>${fmtINR(l.deposit || 0)}</span></div>` : ""}
+      <div class="stat"><span>Posted by</span><span>${l.posted_by_name || "—"} (${l.posted_by || "—"})</span></div>
+      <div class="stat"><span>Contact</span><span>${l.posted_by_contact || "—"}</span></div>
+      <div class="stat"><span>Posted at</span><span>${l.posted_at || "—"}</span></div>
+      <p>${l.description || ""}</p>
+      ${l.listing_url ? `<p><a href="${l.listing_url}" target="_blank" rel="noopener">View original source</a></p>` : ""}
+      ${!isRental ? `<button class="primary" id="fav-btn">${state.favourites.has(id) ? "Remove from saved" : "Save this listing"}</button>` : ""}
+    </div>
+  `;
+  document.getElementById("back").onclick = () => history.back();
+  const favBtn = document.getElementById("fav-btn");
+  if (favBtn) favBtn.onclick = async () => { await toggleFavourite(id); renderListingDetail(id); };
+}
+
+function renderRentalsTab() {
+  const app = document.getElementById("app");
+  const localities = uniqueValues(state.rentals, "locality");
+  app.innerHTML = `
+    <h2>Rentals</h2>
+    <div class="filters card">
+      <label>Locality
+        <select id="r-locality"><option value="">Any</option>
+          ${localities.map(l => `<option>${l}</option>`).join("")}
+        </select>
+      </label>
+    </div>
+    <div class="grid" id="rental-grid"></div>
+  `;
+  const grid = document.getElementById("rental-grid");
+  const render = (loc) => {
+    grid.innerHTML = "";
+    state.rentals.filter(r => r.is_live !== false && (!loc || r.locality === loc)).slice(0, 60).forEach(r => {
+      const card = el(`
+        <div class="card listing-card">
+          <h3>${r.title || r.apartment_name}</h3>
+          <div class="meta">${r.bedroom} BHK · ${r.locality}</div>
+          <div class="price">${fmtINR(r.price)}/mo</div>
+          <div class="meta">Deposit: ${fmtINR(r.website === 'zerobroker' ? (r.deposit * r.price) : r.deposit)}</div>
+        </div>
+      `);
+      grid.appendChild(card);
+    });
+  };
+  render("");
+  document.getElementById("r-locality").onchange = (e) => render(e.target.value);
+}
+
+function renderProjectsTab() {
+  const app = document.getElementById("app");
+  app.innerHTML = `<h2>Builder projects</h2><div class="grid" id="project-grid"></div>`;
+  const grid = document.getElementById("project-grid");
+  state.projects.slice(0, 60).forEach(p => {
+    const priceMin = correctPrice(p.price_min, p.min_area_sqft);
+    const priceMax = correctPrice(p.price_max, p.max_area_sqft);
+    const card = el(`
+      <div class="card">
+        <h3>${p.apartment_name}</h3>
+        <div class="meta">${p.developer_name} · ${p.locality} · ${p.project_status}</div>
+        <div class="price">${fmtINR(priceMin)} – ${fmtINR(priceMax)}</div>
+        <div class="meta">${p.min_area_sqft}–${p.max_area_sqft} sqft · ${p.total_units} units</div>
+        <div class="meta">Listed on portal: ${p.total_listings}</div>
+      </div>
+    `);
+    grid.appendChild(card);
+  });
+}
+
+function renderSavedTab() {
+  const app = document.getElementById("app");
+  const saved = state.listings.filter(l => state.favourites.has(l.listing_id));
+  app.innerHTML = `<h2>Saved listings</h2><div class="grid" id="saved-grid"></div>`;
+  const grid = document.getElementById("saved-grid");
+  if (!saved.length) { grid.innerHTML = `<p class="muted">Nothing saved yet — open a listing and tap "Save".</p>`; return; }
+  saved.forEach(l => {
+    const card = el(`
+      <div class="card listing-card" data-id="${l.listing_id}">
+        <h3>${l.apartment_name}</h3>
+        <div class="meta">${l.bedroom} BHK · ${l.locality}</div>
+        <div class="price">${fmtINR(l.price)}</div>
+      </div>
+    `);
+    card.onclick = () => { location.hash = `#/listing/${l.listing_id}`; };
+    grid.appendChild(card);
+  });
+}
+
+function renderInsightsTab() {
+  const app = document.getElementById("app");
+  const liveListings = state.listings.filter(l => l.is_live);
+  const byLocality = {};
+  liveListings.forEach(l => {
+    if (!l.locality || !l.carpet_area) return;
+    byLocality[l.locality] = byLocality[l.locality] || [];
+    byLocality[l.locality].push(l.price / l.carpet_area);
+  });
+  const localityRows = Object.entries(byLocality).map(([loc, arr]) => {
+    const avg = arr.reduce((a,b) => a+b, 0) / arr.length;
+    return { loc, avg, n: arr.length };
+  }).sort((a,b) => b.avg - a.avg).slice(0, 10);
+
+  const correctedProjects = state.projects.map(p => ({
+    ...p, cMin: correctPrice(p.price_min, p.min_area_sqft), cMax: correctPrice(p.price_max, p.max_area_sqft)
+  })).sort((a,b) => b.cMax - a.cMax).slice(0, 5);
+
+  app.innerHTML = `
+    <h2>Insights</h2>
+    <div class="card">
+      <h3>Dataset overview</h3>
+      <div class="stat"><span>Total listing records retrieved</span><span>${state.listings.length}</span></div>
+      <div class="stat"><span>Live listings</span><span>${liveListings.length}</span></div>
+      <div class="stat"><span>Rentals retrieved</span><span>${state.rentals.length}</span></div>
+      <div class="stat"><span>Projects retrieved</span><span>${state.projects.length}</span></div>
+    </div>
+    <div class="card">
+      <h3>Top 10 localities by price/sqft (live listings)</h3>
+      <table><tr><th>Locality</th><th>Avg ₹/sqft</th><th>Sample size</th></tr>
+        ${localityRows.map(r => `<tr><td>${r.loc}</td><td>${fmtINR(r.avg)}</td><td>${r.n}</td></tr>`).join("")}
+      </table>
+    </div>
+    <div class="card">
+      <h3>Top 5 priciest projects (unit-corrected)</h3>
+      <table><tr><th>Project</th><th>Locality</th><th>Price range</th></tr>
+        ${correctedProjects.map(p => `<tr><td>${p.apartment_name}</td><td>${p.locality}</td><td>${fmtINR(p.cMin)} – ${fmtINR(p.cMax)}</td></tr>`).join("")}
+      </table>
+    </div>
+    <div class="card">
+      <h3>Data quality flags found during this audit</h3>
+      <div class="stat"><span>Corrupt listings (physically impossible)</span><span>${CORRUPT_IDS.size}</span></div>
+      <div class="stat"><span>Fake / bait listings</span><span>${FAKE_IDS.size}</span></div>
+      <p class="muted">See README.md and submission.json → findings for the full list and methodology.</p>
+    </div>
+  `;
+}
+
+/* ================= ROUTER ================= */
+function switchTab(tab) {
+  state.currentTab = tab;
+  document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+  if (tab === "logout") { clearSession(); location.hash = ""; renderLogin(); return; }
+  location.hash = `#/${tab}`;
+  render();
+}
+
+function render() {
+  const hash = location.hash || "#/listings";
+  const parts = hash.replace("#/", "").split("/");
+  if (parts[0] === "listing" && parts[1]) { renderListingDetail(parts[1]); return; }
+  const tab = parts[0] || "listings";
+  document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+  if (tab === "listings") renderListingsTab();
+  else if (tab === "rentals") renderRentalsTab();
+  else if (tab === "projects") renderProjectsTab();
+  else if (tab === "saved") renderSavedTab();
+  else if (tab === "insights") renderInsightsTab();
+  else renderListingsTab();
+}
+
+window.addEventListener("hashchange", render);
+
+/* ================= BOOT ================= */
+async function boot() {
+  document.getElementById("tabs").style.display = "flex";
+  renderLoading("Loading your data — this pages through the full dataset and can take up to a minute…");
+  try {
+    await loadAllData((msg) => renderLoading(msg));
+    render();
+  } catch (e) {
+    document.getElementById("app").innerHTML = `<div class="error-box">Failed to load data: ${e.message}. Try logging in again.</div>`;
+  }
+}
+
+document.getElementById("tabs").addEventListener("click", (e) => {
+  if (e.target.dataset.tab) switchTab(e.target.dataset.tab);
+});
+
+(function init() {
+  if (loadSession()) {
+    boot();
+  } else {
+    renderLogin();
+  }
+})();
+</script>
+</body>
+</html>
